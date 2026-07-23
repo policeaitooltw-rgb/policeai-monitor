@@ -25,8 +25,10 @@ def load_config(path=CFG):
     return c
 
 
-def fetch_stats(c, timeout=20):
+def fetch_stats(c, date=None, timeout=20):
     p = {"token": c["admin_token"]}
+    if date:
+        p["date"] = date
     if c.get("full_machine_id"):
         p["full"] = "1"
     r = requests.get(c["api_base"].rstrip("/") + "/admin/stats", params=p,
@@ -52,7 +54,7 @@ def build(s):
     t = s.get("totals", {}) or {}
     cost = float(t.get("cost_ntd") or 0)
     usd = t.get("cost_usd")
-    lines = [f"📊 智慧文書系統｜今日花費總結（{s.get('date', '')}）",
+    lines = [f"📊 智慧文書系統｜昨日花費總結（{s.get('date', '')}）",
              f"全站合計：NT${cost:.2f}" + (f"（≈US${usd:.2f}）" if usd else ""),
              f"呼叫 {int(t.get('calls') or 0)} 次｜tokens {int(t.get('tokens') or 0):,}"
              f"｜在線 {int(t.get('active_machines') or 0)} 台"]
@@ -75,7 +77,7 @@ def build(s):
             lines.append(f"　{name}　{d['calls']} 次　NT${d['cost_ntd']:.2f}")
 
     if cost == 0:
-        lines.append("\n（今日無付費 AI 用量）")
+        lines.append("\n（該日無付費 AI 用量）")
     lines.append(f"\n台灣時間每日 00:00 重置。")
     return "\n".join(lines)
 
@@ -85,8 +87,11 @@ def main():
     if not c["admin_token"]:
         print("✗ 未設定 admin_token。", file=sys.stderr)
         sys.exit(1)
+    # 每天早上推「昨天一整天」的總結（07:00 推當天只會是 0，故查昨日）
+    tz = datetime.timezone(datetime.timedelta(hours=8))
+    yday = (datetime.datetime.now(tz) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
     try:
-        s = fetch_stats(c)
+        s = fetch_stats(c, date=yday)
     except Exception as e:
         send_telegram(c, f"⚠️ 智慧文書系統每日總結：取用量失敗（{e}）")
         sys.exit(1)
